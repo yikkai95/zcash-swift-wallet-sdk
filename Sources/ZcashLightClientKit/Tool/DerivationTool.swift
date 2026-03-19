@@ -76,6 +76,12 @@ public protocol KeyDeriving {
     ///     - some `ZcashError.rust*` error if the derivation fails.
     /// - Returns a `[Uint8]`
     func deriveArbitraryAccountKey(contextString: [UInt8], seed: [UInt8], accountIndex: Zip32AccountIndex) throws -> [UInt8]
+
+    /// Derives the 32-byte Sapling note commitment for a Payment URI deterministically.
+    /// - Parameter key: the Payment URI key bytes (seed material)
+    /// - Parameter amount: the amount in zatoshis
+    /// - Returns: 32-byte note commitment
+    static func derivePaymentNoteCommitment(key: [UInt8], amount: UInt64) throws -> [UInt8]
 }
 
 public class DerivationTool: KeyDeriving {
@@ -147,6 +153,10 @@ public class DerivationTool: KeyDeriving {
     /// - Returns a `[Uint8]`
     public func deriveArbitraryAccountKey(contextString: [UInt8], seed: [UInt8], accountIndex: Zip32AccountIndex) throws -> [UInt8] {
         try backend.deriveArbitraryAccountKey(contextString: contextString, from: seed, accountIndex: accountIndex)
+    }
+
+    public static func derivePaymentNoteCommitment(key: [UInt8], amount: UInt64) throws -> [UInt8] {
+        try ZcashKeyDerivationBackend.derivePaymentNoteCommitment(key: key, amount: amount)
     }
 }
 
