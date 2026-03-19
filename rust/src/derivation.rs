@@ -802,3 +802,63 @@ pub unsafe extern "C" fn zcashlc_derive_arbitrary_account_key(
     });
     unwrap_exc_or_null(res)
 }
+
+/// Derives the Sapling note commitment for a Payment URI.
+///
+/// Given a key (seed bytes) and an amount (in zatoshis), this function deterministically
+/// derives the Sapling note commitment that corresponds to the Payment URI.
+///
+/// The derivation follows the Payment URI specification:
+/// 1. Derive ExtendedSpendingKey from key
+/// 2. Get default payment address (diversifier + pk_d)
+/// 3. Derive rseed deterministically via PRF^expand
+/// 4. Construct the note and compute its commitment (cm)
+///
+/// Returns a 32-byte note commitment.
+///
+/// # Safety
+///
+/// - `key` must be non-null and valid for reads for `key_len` bytes.
+/// - The memory referenced by `key` must not be mutated for the duration of the function call.
+/// - Call `zcashlc_free_boxed_slice` to free the memory associated with the returned pointer
+///   when done using it.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn zcashlc_derive_payment_note_commitment(
+    key: *const u8,
+    key_len: usize,
+    amount: u64,
+) -> *mut ffi::BoxedSlice {
+    let res = catch_panic(|| {
+        let key = unsafe { slice::from_raw_parts(key, key_len) };
+
+        // 1. Derive extended spending key from key (key acts as seed)
+        let xsk = sapling::zip32::ExtendedSpendingKey::master(key);
+
+        // 2. Get default payment address (contains diversifier + pk_d)
+        let (_, payment_address) = xsk.default_address();
+
+        // 3. Derive rseed deterministically via PRF^expand
+        // PRF^expand(key, t) = BLAKE2b-512("Zcash_ExpandSeed", key || t)
+        // Domain byte 0x09 is a placeholder (spec uses 0xFIXME)
+        let prf_output = blake2b_simd::Params::new()
+            .hash_length(64)
+            .personal(b"Zcash_ExpandSeed")
+            .to_state()
+            .update(key)
+            .update(&[0x09])
+            .finalize();
+        let mut rseed_bytes = [0u8; 32];
+        rseed_bytes.copy_from_slice(&prf_output.as_bytes()[..32]);
+        let rseed = sapling::note::Rseed::AfterZip212(rseed_bytes);
+
+        // 4. Construct note
+        let note_value = sapling::value::NoteValue::from_raw(amount);
+        let note = sapling::Note::from_parts(payment_address, note_value, rseed);
+
+        // 5. Compute commitment
+        let cm = note.cmu();
+
+        Ok(ffi::BoxedSlice::some(cm.to_bytes().to_vec()))
+    });
+    unwrap_exc_or_null(res)
+}

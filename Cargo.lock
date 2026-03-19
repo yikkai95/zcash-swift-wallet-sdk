@@ -2433,6 +2433,7 @@ dependencies = [
  "anyhow",
  "bindgen",
  "bitflags 2.10.0",
+ "blake2b_simd",
  "bytes",
  "cbindgen",
  "cc",

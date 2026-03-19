@@ -250,6 +250,37 @@ struct ZcashKeyDerivationBackend: ZcashKeyDerivationBackendWelding {
         )
     }
 
+    // MARK: Payment URI
+
+    /// Derives the 32-byte Sapling note commitment for a Payment URI deterministically
+    /// from the given key and amount, without requiring a blockchain sync.
+    static func derivePaymentNoteCommitment(
+        key: [UInt8],
+        amount: UInt64
+    ) throws -> [UInt8] {
+        let boxedSlicePtr = key.withUnsafeBufferPointer { keyBufferPtr in
+            return zcashlc_derive_payment_note_commitment(
+                keyBufferPtr.baseAddress,
+                UInt(key.count),
+                amount
+            )
+        }
+
+        defer { zcashlc_free_boxed_slice(boxedSlicePtr) }
+
+        guard let boxedSlice = boxedSlicePtr?.pointee else {
+            throw ZcashError.rustDeriveUnifiedSpendingKey(
+                ZcashKeyDerivationBackend.lastErrorMessage(
+                    fallback: "`derivePaymentNoteCommitment` failed with unknown error"
+                )
+            )
+        }
+
+        return boxedSlice.ptr.toByteArray(
+            length: Int(boxedSlice.len)
+        )
+    }
+
     // MARK: Error Handling
 
     private static func lastErrorMessage(fallback: String) -> String {
